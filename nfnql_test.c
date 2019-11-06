@@ -29,19 +29,6 @@ void dump(unsigned char* buf, int size) {
 	}
 }
 
-int filter_domain(char *haystack, const char *needle, int size) {	// needle : "Host: "
-	int target_sz = strlen(needle);
-	for(int i=0;i<size-target_sz+1;++i) {
-		if(!memcmp(haystack+i, needle, target_sz)) {
-			puts("[+] We got a match!");
-			if(!memcmp((char *)(haystack+i+target_sz), filter_host, strlen(filter_host)))
-				return TRUE;
-			break;
-		}
-	}
-	return FALSE;
-}
-
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -114,16 +101,19 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
 	// Check whether the host field matches our condition
 	if(require_chk == TRUE) {
-		char *host_loc = strstr(data+app_offset, "Host: ");
-		if(host_loc != NULL) {
-			char *host_name = host_loc + 6;
-			if(!memcmp(host_name, filter_host, strlen(filter_host))) {
-				puts("[+] The Host Name Matches");
-				filter_flag = TRUE;
-			} else {
-				puts("[-] Host Name doesn't match");
-				filter_flag = FALSE;
+		int idx = 0;
+		while(TRUE) {
+			if(!memcmp(data+app_offset+idx, "Host: ", 6)) {
+				puts("Found Host:");
+				if(!memcmp(data+app_offset+idx+6, filter_host, strlen(filter_host))) {
+					filter_flag = TRUE;
+					break;
+				} else {
+					filter_flag = FALSE;
+					break;
+				}
 			}
+			idx += 1;
 		}
 	}
 	
@@ -134,6 +124,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	      struct nfq_data *nfa, void *data)
 {
+	filter_flag = FALSE;
 	u_int32_t id = print_pkt(nfa);
 
 	if(filter_flag == TRUE) return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
